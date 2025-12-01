@@ -61,7 +61,7 @@ const App: React.FC = () => {
       console.error("Failed to fetch data:", error);
       // Check for index error
       if (error.message && error.message.includes('currently building')) {
-         setErrorMsg("Firebase đang xây dựng chỉ mục (Index Building)...\nQuá trình này tự động và mất khoảng 2-5 phút.\nVui lòng đợi một lát rồi bấm 'Thử lại' nhé!");
+         setErrorMsg("Hệ thống đang xây dựng dữ liệu (Index Building)...\nQuá trình này tự động và mất khoảng 2-5 phút.\nVui lòng đợi một lát rồi bấm 'Thử lại' nhé!");
       } else if (error.message && error.message.includes('requires an index')) {
          // Simplify error message for user
          setErrorMsg("Hệ thống cần cấu hình Database (Index) để sắp xếp dữ liệu.\nVui lòng mở Console (F12) hoặc xem link trong thông báo lỗi gốc để bấm tạo Index.");
@@ -106,17 +106,27 @@ const App: React.FC = () => {
     }
   };
   
-  const handleSaveBooking = async (booking: Booking) => {
+  const handleSaveBooking = async (booking: Booking | Booking[]) => {
     if (!user) return;
     try {
-        if (editingBooking) {
-            await firebaseService.updateBooking(booking);
-            setBookings(prev => prev.map(b => b.id === booking.id ? booking : b));
+        if (Array.isArray(booking)) {
+            // Handle Combo (Array of bookings)
+            const promises = booking.map(b => {
+                const newBookingData = { ...b, userId: user.uid };
+                return firebaseService.addBooking(newBookingData);
+            });
+            const newBookings = await Promise.all(promises);
+            setBookings(prev => [...newBookings, ...prev]);
         } else {
-            // Attach User ID to new booking
-            const newBookingData = { ...booking, userId: user.uid };
-            const newBooking = await firebaseService.addBooking(newBookingData);
-            setBookings(prev => [newBooking, ...prev]);
+            // Handle Single Booking (Edit or Create)
+            if (editingBooking) {
+                await firebaseService.updateBooking(booking);
+                setBookings(prev => prev.map(b => b.id === booking.id ? booking : b));
+            } else {
+                const newBookingData = { ...booking, userId: user.uid };
+                const newBooking = await firebaseService.addBooking(newBookingData);
+                setBookings(prev => [newBooking, ...prev]);
+            }
         }
         setIsFormOpen(false);
     } catch (error) {
