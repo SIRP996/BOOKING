@@ -60,7 +60,7 @@ const CustomTooltip = ({ active, payload, label, currency = false }: any) => {
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
             <span className="capitalize">{entry.name}: </span>
             <span className="font-mono font-bold">
-              {currency || entry.name === 'Chi phí' || entry.name === 'Ngân sách' || entry.name === 'Đã chi' || (entry.name === 'value' && entry.payload.cost) 
+              {currency || entry.name === 'Chi phí' || entry.name === 'Ngân sách' || entry.name === 'Đã chi' || (entry.name === 'value' && entry.payload.cost) || (entry.name === 'value' && entry.payload.isCost)
                 ? formatCurrency(entry.value) 
                 : entry.value}
             </span>
@@ -79,6 +79,9 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
   const [filterCampaign, setFilterCampaign] = useState('All');
   const [filterProduct, setFilterProduct] = useState('All');
   const [filterPlatform, setFilterPlatform] = useState('All');
+  
+  // --- VIEW STATES ---
+  const [platformMetric, setPlatformMetric] = useState<'count' | 'cost'>('count');
 
   // --- UNIQUE VALUES ---
   const uniqueCampaigns = useMemo(() => Array.from(new Set(bookings.map(b => b.campaignName).filter(Boolean))), [bookings]);
@@ -111,6 +114,9 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
     const quotedCost = data
         .filter(b => b.status !== BookingStatus.COMPLETED && b.status !== BookingStatus.CANCELLED)
         .reduce((sum, b) => sum + b.cost, 0);
+    
+    // Total for Platform Cost View
+    const totalCostAll = data.reduce((sum, b) => sum + b.cost, 0);
 
     const completed = data.filter(b => b.status === BookingStatus.COMPLETED).length;
     const completionRate = totalBookings > 0 ? Math.round((completed / totalBookings) * 100) : 0;
@@ -126,11 +132,19 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
     const timelineData = Object.values(timelineMap).sort((a: StatItem, b: StatItem) => a.name.localeCompare(b.name));
 
     // 2. Platform Distribution (Donut)
+    // Count
     const platformMap = data.reduce((acc, b) => {
       acc[b.platform] = (acc[b.platform] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     const platformData = Object.keys(platformMap).map(k => ({ name: k, value: platformMap[k] }));
+
+    // Cost
+    const platformCostMap = data.reduce((acc, b) => {
+      acc[b.platform] = (acc[b.platform] || 0) + b.cost;
+      return acc;
+    }, {} as Record<string, number>);
+    const platformCostData = Object.keys(platformCostMap).map(k => ({ name: k, value: platformCostMap[k], isCost: true }));
 
     // 3. Top Products (Leaderboard)
     const productMap = data.reduce((acc, b) => {
@@ -183,8 +197,8 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
     }).sort((a, b) => b.spent - a.spent).slice(0, 7); // Top 7 spenders
 
     return { 
-      totalBookings, spentCost, quotedCost, completed, completionRate,
-      timelineData, platformData, topProducts, funnelData, picData, campaignStats
+      totalBookings, spentCost, quotedCost, totalCostAll, completed, completionRate,
+      timelineData, platformData, platformCostData, topProducts, funnelData, picData, campaignStats
     };
   }, [filteredBookings, campaigns]);
 
@@ -192,6 +206,8 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
     setStartDate(''); setEndDate('');
     setFilterCampaign('All'); setFilterProduct('All'); setFilterPlatform('All');
   };
+  
+  const currentPlatformData = platformMetric === 'count' ? stats.platformData : stats.platformCostData;
 
   return (
     <div className="space-y-6 pb-12">
@@ -355,17 +371,37 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
 
             {/* RIGHT: Platform Distribution (1/3 width) */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
-                    <Share2 className="w-5 h-5 text-cyan-500" />
-                    Nền tảng
-                </h3>
-                <p className="text-xs text-slate-500 mb-4">Tỷ lệ booking phân bổ</p>
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
+                            <Share2 className="w-5 h-5 text-cyan-500" />
+                            Nền tảng
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                            {platformMetric === 'count' ? 'Tỷ lệ theo số lượng booking' : 'Tỷ lệ theo ngân sách đầu tư'}
+                        </p>
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setPlatformMetric('count')} 
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${platformMetric === 'count' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-gray-700'}`}
+                        >
+                            Số lượng
+                        </button>
+                        <button 
+                            onClick={() => setPlatformMetric('cost')} 
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${platformMetric === 'cost' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-gray-700'}`}
+                        >
+                            Ngân sách
+                        </button>
+                    </div>
+                </div>
                 
                 <div className="flex-1 min-h-[250px] relative">
                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie
-                                data={stats.platformData}
+                                data={currentPlatformData}
                                 cx="50%"
                                 cy="50%"
                                 innerRadius={60}
@@ -374,23 +410,27 @@ const Dashboard: React.FC<DashboardProps> = ({ bookings, campaigns = [] }) => {
                                 dataKey="value"
                                 stroke="none"
                             >
-                                {stats.platformData.map((entry, index) => (
+                                {currentPlatformData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
-                            <RechartsTooltip content={<CustomTooltip />} />
+                            <RechartsTooltip content={<CustomTooltip currency={platformMetric === 'cost'} />} />
                         </PieChart>
                     </ResponsiveContainer>
                     {/* Center Text */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                          <div className="text-center">
-                            <span className="block text-2xl font-bold text-slate-800">{stats.platformData.length}</span>
-                            <span className="text-[10px] uppercase text-slate-400 font-bold">Platforms</span>
+                            <span className="block text-xl font-bold text-slate-800">
+                                {platformMetric === 'count' ? stats.totalBookings : formatCompactNumber(stats.totalCostAll)}
+                            </span>
+                            <span className="text-[10px] uppercase text-slate-400 font-bold">
+                                {platformMetric === 'count' ? 'Bookings' : 'Total (VND)'}
+                            </span>
                          </div>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 justify-center mt-2">
-                    {stats.platformData.map((entry, index) => (
+                    {currentPlatformData.map((entry, index) => (
                         <div key={entry.name} className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded-md">
                             <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[index % COLORS.length]}}></div>
                             {entry.name}
