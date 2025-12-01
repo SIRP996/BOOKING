@@ -40,12 +40,11 @@ export const generateBookingBrief = async (
     return response.text || "Không thể tạo nội dung lúc này.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Đã xảy ra lỗi khi kết nối với AI. Vui lòng thử lại.";
+    return "Đã xảy ra lỗi khi kết nối với AI. Vui lòng kiểm tra API Key.";
   }
 };
 
 export const analyzeCampaignData = async (bookings: Booking[]): Promise<string> => {
-    // Basic analysis of the current booking list
     try {
         const summary = bookings.map(b => `- ${b.kol.name} (${b.platform} - ${b.productName}): ${b.status} - ${b.cost} VND`).join('\n');
         
